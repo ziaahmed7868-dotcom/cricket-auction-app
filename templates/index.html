@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{{ settings.tournament_name }}</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; -webkit-user-select: none; user-select: none; }
+        body { background: #0b1120; color: #f8fafc; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+        .error-box { margin: auto; padding: 24px; max-width: 400px; text-align: center; background: #1e293b; border-radius: 16px; border: 1px solid #ef4444; }
+        .error-box h2 { color: #f87171; margin-bottom: 10px; }
+
+        #welcome-screen { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 24px; text-align: center; background: radial-gradient(circle at top, #1e3a8a, #0b1120 70%); }
+        .badge-tourney { background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; border: 1px solid rgba(56, 189, 248, 0.3); }
+        #welcome-screen h1 { font-size: 2rem; font-weight: 800; margin-bottom: 24px; line-height: 1.2; }
+        .team-welcome-card { background: #1e293b; border: 1px solid #334155; padding: 18px 28px; border-radius: 16px; margin-bottom: 32px; width: 100%; max-width: 340px; }
+        .team-welcome-card span { font-size: 0.85rem; color: #94a3b8; display: block; margin-bottom: 4px; }
+        .team-welcome-card strong { font-size: 1.35rem; color: #fbbf24; }
+        .btn-enter { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; border: none; padding: 18px 36px; font-size: 1.2rem; font-weight: 800; border-radius: 14px; width: 100%; max-width: 340px; cursor: pointer; box-shadow: 0 10px 25px rgba(34, 197, 94, 0.35); }
+
+        #auction-screen { display: none; flex-direction: column; height: 100dvh; justify-content: space-between; }
+
+        .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #1e293b; border-bottom: 1px solid #334155; }
+        .my-team-title { font-weight: 800; font-size: 1rem; color: #fbbf24; }
+        .round-tag { font-size: 0.72rem; background: #334155; color: #cbd5e1; padding: 3px 8px; border-radius: 6px; margin-left: 6px; font-weight: 800; letter-spacing: 0.5px; }
+
+        .round-unsold-glow {
+            background: rgba(220, 38, 38, 0.25) !important;
+            color: #fca5a5 !important;
+            border: 1px solid #ef4444;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.85);
+            animation: glowPulse 1s infinite alternate;
+        }
+        @keyframes glowPulse {
+            from { box-shadow: 0 0 6px rgba(239, 68, 68, 0.6); }
+            to { box-shadow: 0 0 16px rgba(239, 68, 68, 1); }
+        }
+
+        .header-btns { display: flex; gap: 8px; }
+        .btn-sm { background: #334155; color: #f8fafc; border: none; padding: 7px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; }
+        .btn-admin-toggle { background: #dc2626; color: white; }
+
+        .live-bid-bar { display: flex; justify-content: space-between; align-items: center; background: #0f172a; padding: 10px 16px; border-bottom: 1px solid #1e293b; }
+        .bid-info small { color: #94a3b8; font-size: 0.75rem; display: block; text-transform: uppercase; }
+        .bid-info .amount { font-size: 1.5rem; font-weight: 900; color: #38bdf8; }
+        .bid-info .leader { font-size: 0.85rem; font-weight: 700; color: #4ade80; }
+
+        .timer-box { text-align: right; min-width: 75px; }
+        .timer-normal { font-size: 1.6rem; font-weight: 800; color: #f8fafc; }
+        .timer-final { font-size: 2.5rem; font-weight: 900; color: #ef4444; line-height: 1; animation: pulse 0.6s infinite alternate; }
+        @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.12); } }
+
+        .player-card { margin: 8px 14px; background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 18px; padding: 16px 14px; display: flex; flex-direction: column; align-items: center; text-align: center; flex: 1; justify-content: center; min-height: 0; position: relative; }
+        .player-photo { width: 155px; height: 155px; border-radius: 50%; object-fit: cover; border: 4px solid #38bdf8; background: #334155; margin-bottom: 12px; box-shadow: 0 8px 20px rgba(56, 189, 248, 0.25); }
+        .player-role { background: #2563eb; color: white; font-size: 0.8rem; font-weight: 800; padding: 4px 12px; border-radius: 12px; margin-bottom: 8px; }
+        .player-name { font-size: 1.5rem; font-weight: 800; margin-bottom: 6px; }
+        .player-base { font-size: 0.9rem; color: #94a3b8; }
+
+        .speaker-pill { display: none; position: absolute; top: 10px; background: rgba(234, 179, 8, 0.2); border: 1px solid #eab308; color: #fde047; padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 800; animation: pulse 0.5s infinite alternate; }
+
+        .bid-action-wrap { padding: 0 14px; }
+        .btn-bid { width: 100%; padding: 15px; border: none; border-radius: 14px; font-size: 1.15rem; font-weight: 900; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; cursor: pointer; box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35); display: block; text-align: center; }
+        .btn-bid:disabled { background: #334155; color: #94a3b8; box-shadow: none; cursor: not-allowed; font-size: 0.95rem; }
+        .btn-pdf { background: linear-gradient(135deg, #16a34a, #15803d); color: white; box-shadow: 0 6px 18px rgba(22, 163, 74, 0.35); }
+
+        .stats-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 14px; }
+        .stat-box { background: #1e293b; border-radius: 10px; padding: 8px 6px; text-align: center; border: 1px solid #334155; }
+        .stat-box small { font-size: 0.7rem; color: #94a3b8; display: block; }
+        .stat-box strong { font-size: 0.95rem; color: #f8fafc; }
+
+        .voice-wrap { padding: 0 14px 8px; }
+        .btn-ptt { width: 100%; padding: 13px; border-radius: 12px; border: 2px solid #eab308; background: #1e293b; color: #fde047; font-weight: 800; font-size: 0.9rem; cursor: pointer; touch-action: none; }
+        .btn-ptt.talking { background: #dc2626; border-color: #fca5a5; color: white; transform: scale(0.98); box-shadow: 0 0 18px rgba(239, 68, 68, 0.65); }
+
+        .category-strip { display: flex; justify-content: space-around; background: #1e293b; padding: 8px 10px; border-top: 1px solid #334155; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; }
+        .category-strip span b { color: #38bdf8; }
+
+        #transition-screen { display: none; position: fixed; inset: 0; background: rgba(11, 17, 32, 0.96); z-index: 50; flex-direction: column; justify-content: center; align-items: center; padding: 24px; text-align: center; }
+        .trans-photo { width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 4px solid #fbbf24; margin-bottom: 16px; background: #1e293b; }
+        .stamp { font-size: 2.2rem; font-weight: 900; padding: 6px 24px; border-radius: 12px; border: 4px solid; transform: rotate(-4deg); margin-bottom: 14px; }
+        .stamp-sold { color: #4ade80; border-color: #4ade80; }
+        .stamp-unsold { color: #f87171; border-color: #f87171; }
+
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 60; justify-content: center; align-items: flex-end; }
+        .modal-sheet { background: #1e293b; width: 100%; max-height: 82dvh; border-radius: 20px 20px 0 0; padding: 18px; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+        .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .admin-grid button { padding: 14px; border: none; border-radius: 10px; font-weight: 800; color: white; cursor: pointer; }
+        .team-roster-card { background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+        .team-roster-top { display: flex; justify-content: space-between; font-weight: 800; color: #fbbf24; margin-bottom: 6px; }
+        .roster-players-list { font-size: 0.8rem; color: #cbd5e1; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+{% if error %}
+    <div class="error-box">
+        <h2>Access Restricted</h2>
+        <p>{{ error }}</p>
+    </div>
+{% else %}
+
+    <div id="welcome-screen">
+        <div class="badge-tourney">Live Multiplayer Auction</div>
+        <h1>{{ settings.tournament_name }}</h1>
+        <div class="team-welcome-card">
+            <span>Assigned Franchise</span>
+            <strong>{{ my_team.team_name }} ({{ my_team.short_name }})</strong>
+        </div>
+        <button class="btn-enter" onclick="enterAuction()">ENTER AUCTION</button>
+    </div>
+
+    <div id="auction-screen">
+        <div class="top-bar">
+            <div>
+                <span class="my-team-title">{{ my_team.short_name }}</span>
+                <span class="round-tag" id="round-badge">MAIN ROUND</span>
+            </div>
+            <div class="header-btns">
+                <button class="btn-sm" onclick="openModal('roster-modal')">TEAMS & PURSE</button>
+                {% if my_team.is_admin %}
+                <button class="btn-sm btn-admin-toggle" onclick="openModal('admin-modal')">ADMIN</button>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="live-bid-bar">
+            <div class="bid-info">
+                <small id="bid-label">Current Bid</small>
+                <div class="amount" id="current-bid">₹0.0 Cr</div>
+                <div class="leader" id="highest-bidder">No bids yet</div>
+            </div>
+            <div class="timer-box">
+                <div id="timer-display" class="timer-normal">15s</div>
+                <small id="timer-sub" style="color:#94a3b8; font-size:0.7rem;">TIMER</small>
+            </div>
+        </div>
+
+        <div class="player-card" id="active-player-card">
+            <div id="speaker-pill" class="speaker-pill">🔊 MI is speaking...</div>
+            <img id="player-photo" class="player-photo" src="" onerror="this.src='https://cdn-icons-png.flaticon.com/512/149/149071.png'" alt="Player">
+            <span class="player-role" id="player-role">BAT</span>
+            <div class="player-name" id="player-name">Loading...</div>
+            <div class="player-base" id="player-base">Base Price: ₹0.5 Cr</div>
+        </div>
+
+        <div class="bid-action-wrap">
+            <button id="bid-btn" class="btn-bid" onclick="placeBid()">PLACE BID</button>
+            <button id="pdf-download-btn" class="btn-bid btn-pdf" style="display: none; margin-top: 8px;" onclick="downloadMyPdf()">📥 DOWNLOAD SQUAD PDF ROSTER</button>
+        </div>
+
+        <div class="stats-strip">
+            <div class="stat-box">
+                <small>PURSE LEFT</small>
+                <strong id="my-purse">₹0.0 Cr</strong>
+            </div>
+            <div class="stat-box">
+                <small>SQUAD</small>
+                <strong id="my-squad-count">0/15</strong>
+            </div>
+            <div class="stat-box">
+                <small>MAB</small>
+                <strong id="my-mab" style="color:#4ade80;">₹0.0 Cr</strong>
+            </div>
+        </div>
+
+        <div class="voice-wrap">
+            <button id="ptt-btn" class="btn-ptt">🎙️ HOLD TO TALK (WALKIE-TALKIE)</button>
+        </div>
+
+        <div class="category-strip">
+            <span>BAT: <b id="cnt-bat">0</b></span>
+            <span>BOWL: <b id="cnt-bowl">0</b></span>
+            <span>AR: <b id="cnt-ar">0</b></span>
+            <span>WK: <b id="cnt-wk">0</b></span>
+        </div>
+    </div>
+
+    <div id="transition-screen">
+        <img id="trans-photo" class="trans-photo" src="" onerror="this.src='https://cdn-icons-png.flaticon.com/512/149/149071.png'">
+        <div id="trans-stamp" class="stamp stamp-sold">SOLD!</div>
+        <h2 id="trans-name" style="font-size:1.6rem; margin-bottom:6px;">Player Name</h2>
+        <p id="trans-detail" style="font-size:1.1rem; color:#38bdf8; font-weight:700;"></p>
+    </div>
+
+    <div id="roster-modal" class="modal-overlay" onclick="closeModalOnBg(event, 'roster-modal')">
+        <div class="modal-sheet">
+            <div class="modal-header">
+                <h3>All Teams Purse & Squads</h3>
+                <button class="btn-sm" onclick="closeModal('roster-modal')">CLOSE</button>
+            </div>
+            <div id="all-teams-list"></div>
+        </div>
+    </div>
+
+    {% if my_team.is_admin %}
+    <div id="admin-modal" class="modal-overlay" onclick="closeModalOnBg(event, 'admin-modal')">
+        <div class="modal-sheet">
+            <div class="modal-header">
+                <h3>Auctioneer Controls</h3>
+                <button class="btn-sm" onclick="closeModal('admin-modal')">CLOSE</button>
+            </div>
+            <div class="admin-grid">
+                <button style="background:#16a34a;" onclick="adminCmd('start_or_resume')">▶ START / RESUME</button>
+                <button style="background:#d97706;" onclick="adminCmd('pause')">⏸ PAUSE (RESET TIMER)</button>
+                <button style="background:#2563eb;" onclick="adminCmd('next')">⏭ NEXT / HAMMER</button>
+                <button style="background:#7c3aed;" onclick="adminCmd('undo')">↩ UNDO LAST BID</button>
+                <button style="background:#059669; grid-column: span 2;" onclick="if(confirm('Finish the auction and enable Final PDF downloads?')) adminCmd('complete')">🏁 COMPLETE AUCTION</button>
+                <button style="background:#dc2626; grid-column: span 2;" onclick="if(confirm('Reload fresh from Online Auction.xlsx?')) adminCmd('reload_excel')">🔄 RESET & RELOAD EXCEL</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <script>
+        const MY_TEAM_NAME = "{{ my_team.team_name }}";
+        const MY_SHORT_NAME = "{{ my_team.short_name }}";
+        const MY_TEAM_CODE = "{{ my_team.team_code }}";
+        let pollInterval = null;
+        let socket = null;
+
+        let audioCtx = null;
+        let micStream = null;
+        let scriptProcessor = null;
+        let isTalking = false;
+        let nextPlayTime = 0;
+
+        let lastAnnouncedKey = "";
+        let lastBeepSecond = -1;
+        let lastTransUntil = 0;
+
+        function enterAuction() {
+            const welcomeEl = document.getElementById('welcome-screen');
+            const auctionEl = document.getElementById('auction-screen');
+            if (welcomeEl) welcomeEl.style.display = 'none';
+            if (auctionEl) auctionEl.style.display = 'flex';
+
+            try {
+                initAudioAndSocket();
+            } catch (err) {
+                console.error("Audio/Socket init error:", err);
+            }
+
+            fetchState();
+            if (pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(fetchState, 600);
+        }
+
+        function initAudioAndSocket() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+                audioCtx = new AudioContext({ sampleRate: 16000 });
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            }
+
+            if ('speechSynthesis' in window) {
+                const unlockUtterance = new SpeechSynthesisUtterance("");
+                window.speechSynthesis.speak(unlockUtterance);
+            }
+
+            if (typeof io === 'function') {
+                socket = io();
+
+                socket.on('voice_broadcast', (data) => {
+                    if (!audioCtx) return;
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+                    const int16Array = new Int16Array(data.audio);
+                    const float32Array = new Float32Array(int16Array.length);
+                    for (let i = 0; i < int16Array.length; i++) {
+                        float32Array[i] = int16Array[i] / 32768.0;
+                    }
+
+                    const audioBuffer = audioCtx.createBuffer(1, float32Array.length, 16000);
+                    audioBuffer.getChannelData(0).set(float32Array);
+
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(audioCtx.destination);
+
+                    const now = audioCtx.currentTime;
+                    if (nextPlayTime < now) nextPlayTime = now;
+                    source.start(nextPlayTime);
+                    nextPlayTime += audioBuffer.duration;
+                });
+
+                socket.on('speaker_status', (data) => {
+                    const pill = document.getElementById('speaker-pill');
+                    if (!pill) return;
+                    if (data.speaking) {
+                        pill.innerText = `🔊 ${data.team} is speaking...`;
+                        pill.style.display = 'block';
+                    } else {
+                        pill.style.display = 'none';
+                    }
+                });
+            }
+        }
+
+        function speakText(text, rate = 1.08) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const msg = new SpeechSynthesisUtterance(text);
+                msg.rate = rate;
+                msg.pitch = 1.05;
+                window.speechSynthesis.speak(msg);
+            }
+        }
+
+        function playBeep(freq = 880, duration = 0.14, type = 'sine') {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.22, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        // Synthesized Wooden Hammer Strike Sound
+        function playWoodenHammerStrike(delaySec = 0) {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const startTime = audioCtx.currentTime + delaySec;
+
+            // 1. Low wooden body thud
+            const bodyOsc = audioCtx.createOscillator();
+            const bodyGain = audioCtx.createGain();
+            bodyOsc.type = 'triangle';
+            bodyOsc.frequency.setValueAtTime(190, startTime);
+            bodyOsc.frequency.exponentialRampToValueAtTime(62, startTime + 0.13);
+
+            bodyGain.gain.setValueAtTime(0.75, startTime);
+            bodyGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.14);
+
+            bodyOsc.connect(bodyGain);
+            bodyGain.connect(audioCtx.destination);
+            bodyOsc.start(startTime);
+            bodyOsc.stop(startTime + 0.15);
+
+            // 2. Crisp wooden knock overtone
+            const knockOsc = audioCtx.createOscillator();
+            const knockGain = audioCtx.createGain();
+            knockOsc.type = 'sine';
+            knockOsc.frequency.setValueAtTime(540, startTime);
+            knockOsc.frequency.exponentialRampToValueAtTime(210, startTime + 0.055);
+
+            knockGain.gain.setValueAtTime(0.45, startTime);
+            knockGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.06);
+
+            knockOsc.connect(knockGain);
+            knockGain.connect(audioCtx.destination);
+            knockOsc.start(startTime);
+            knockOsc.stop(startTime + 0.065);
+        }
+
+        function playHammerSound(isSold) {
+            if (isSold) {
+                // Double wooden hammer tap like an auction gavel
+                playWoodenHammerStrike(0);
+                playWoodenHammerStrike(0.18);
+            } else {
+                playBeep(290, 0.24, 'sawtooth');
+                setTimeout(() => playBeep(210, 0.36, 'sawtooth'), 220);
+            }
+        }
+
+        function announceBid(teamShort, amount) {
+            playBeep(660, 0.08, 'sine');
+            speakText(`${teamShort} bids ${amount} Crore`, 1.1);
+        }
+
+        function announceFinalCountdown(secNumber) {
+            playBeep(secNumber === 1 ? 1120 : 860, 0.12, 'sine');
+            const words = { 3: 'Three', 2: 'Two', 1: 'One' };
+            speakText(words[secNumber] || String(secNumber), 1.25);
+        }
+
+        function announceOutcome(trans) {
+            if (!trans || !trans.player) return;
+            const pName = trans.player.name;
+            if (trans.status === 'SOLD') {
+                speakText(`${pName} sold to ${trans.player.sold_to} for ${trans.player.sold_price} Crore`, 1.02);
+            } else {
+                speakText(`${pName} remains unsold`, 1.02);
+            }
+        }
+
+        async function startTalking(e) {
+            if (e) e.preventDefault();
+            if (isTalking) return;
+
+            try {
+                if (!micStream) {
+                    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+                }
+                if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+
+                isTalking = true;
+                const pttBtn = document.getElementById('ptt-btn');
+                pttBtn.classList.add('talking');
+                pttBtn.innerText = '🔴 BROADCASTING LIVE... (RELEASE TO STOP)';
+
+                if (socket) socket.emit('voice_status', { team: MY_SHORT_NAME, speaking: true });
+
+                const source = audioCtx.createMediaStreamSource(micStream);
+                scriptProcessor = audioCtx.createScriptProcessor(2048, 1, 1);
+
+                scriptProcessor.onaudioprocess = (event) => {
+                    if (!isTalking || !socket) return;
+                    const inputData = event.inputBuffer.getChannelData(0);
+                    const int16Buffer = new Int16Array(inputData.length);
+                    for (let i = 0; i < inputData.length; i++) {
+                        let s = Math.max(-1, Math.min(1, inputData[i]));
+                        int16Buffer[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+                    socket.emit('voice_stream', { team: MY_SHORT_NAME, audio: int16Buffer.buffer });
+                };
+
+                source.connect(scriptProcessor);
+                scriptProcessor.connect(audioCtx.destination);
+            } catch (err) {
+                alert("Mic permission blocked! Ensure permissions are allowed.");
+                console.error(err);
+            }
+        }
+
+        function stopTalking(e) {
+            if (e) e.preventDefault();
+            if (!isTalking) return;
+            isTalking = false;
+
+            const pttBtn = document.getElementById('ptt-btn');
+            pttBtn.classList.remove('talking');
+            pttBtn.innerText = '🎙️ HOLD TO TALK (WALKIE-TALKIE)';
+
+            if (scriptProcessor) {
+                scriptProcessor.disconnect();
+                scriptProcessor = null;
+            }
+            if (socket) {
+                socket.emit('voice_status', { team: MY_SHORT_NAME, speaking: false });
+            }
+        }
+
+        const pttButton = document.getElementById('ptt-btn');
+        if (pttButton) {
+            pttButton.addEventListener('mousedown', startTalking);
+            pttButton.addEventListener('mouseup', stopTalking);
+            pttButton.addEventListener('mouseleave', stopTalking);
+            pttButton.addEventListener('touchstart', startTalking, { passive: false });
+            pttButton.addEventListener('touchend', stopTalking, { passive: false });
+            pttButton.addEventListener('touchcancel', stopTalking, { passive: false });
+        }
+
+        function downloadMyPdf() {
+            window.location.href = `/api/download_pdf?key=${encodeURIComponent(MY_TEAM_CODE)}`;
+        }
+
+        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        function closeModalOnBg(e, id) { if (e.target.id === id) closeModal(id); }
+
+        async function fetchState() {
+            try {
+                const res = await fetch('/api/state');
+                const data = await res.json();
+                renderUI(data);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function renderUI(data) {
+            const auc = data.auction;
+            const settings = data.settings;
+            const myTeam = data.teams.find(t => t.team_name === MY_TEAM_NAME);
+            const player = data.current_player;
+
+            const roundBadge = document.getElementById('round-badge');
+            if (auc.round === 'UNSOLD') {
+                roundBadge.innerText = '🔥 UNSOLD ROUND';
+                roundBadge.classList.add('round-unsold-glow');
+            } else {
+                roundBadge.innerText = auc.round === 'COMPLETED' ? 'COMPLETED' : 'MAIN ROUND';
+                roundBadge.classList.remove('round-unsold-glow');
+            }
+
+            if (auc.highest_bidder && auc.is_active && !auc.transition) {
+                const currentKey = `${auc.current_player_id}_${auc.highest_bidder_short}_${auc.current_bid}`;
+                if (currentKey !== lastAnnouncedKey) {
+                    lastAnnouncedKey = currentKey;
+                    announceBid(auc.highest_bidder_short, auc.current_bid);
+                }
+            } else if (!auc.highest_bidder) {
+                lastAnnouncedKey = "";
+            }
+
+            const transScreen = document.getElementById('transition-screen');
+            if (auc.transition) {
+                const tp = auc.transition.player;
+                document.getElementById('trans-photo').src = tp.photo_url || '';
+                document.getElementById('trans-name').innerText = tp.name;
+                const stamp = document.getElementById('trans-stamp');
+                if (auc.transition.status === 'SOLD') {
+                    stamp.innerText = 'SOLD!';
+                    stamp.className = 'stamp stamp-sold';
+                    document.getElementById('trans-detail').innerText = `Sold to ${tp.sold_to} for ₹${tp.sold_price} Cr`;
+                } else {
+                    stamp.innerText = 'UNSOLD';
+                    stamp.className = 'stamp stamp-unsold';
+                    document.getElementById('trans-detail').innerText = `${tp.name} remains unsold`;
+                }
+                transScreen.style.display = 'flex';
+
+                if (auc.transition.until !== lastTransUntil) {
+                    lastTransUntil = auc.transition.until;
+                    playHammerSound(auc.transition.status === 'SOLD');
+                    setTimeout(() => announceOutcome(auc.transition), 320);
+                }
+            } else {
+                transScreen.style.display = 'none';
+            }
+
+            const rem = data.remaining_seconds;
+            const finalSec = settings.final_call_seconds;
+            const timerEl = document.getElementById('timer-display');
+            const timerSub = document.getElementById('timer-sub');
+
+            if (auc.round === 'COMPLETED') {
+                timerEl.className = 'timer-normal';
+                timerEl.innerText = 'END';
+                timerSub.innerText = 'AUCTION DONE';
+                lastBeepSecond = -1;
+            } else if (!auc.is_active) {
+                timerEl.className = 'timer-normal';
+                timerEl.innerText = 'WAIT';
+                timerSub.innerText = 'NOT STARTED';
+                lastBeepSecond = -1;
+            } else if (auc.is_paused) {
+                timerEl.className = 'timer-normal';
+                timerEl.innerText = Math.max(0, Math.ceil(rem - finalSec)) + 's';
+                timerSub.innerText = 'PAUSED (RESET)';
+                lastBeepSecond = -1;
+            } else if (rem <= finalSec && rem > 0 && !auc.transition) {
+                const secCeil = Math.ceil(rem);
+                timerEl.className = 'timer-final';
+                timerEl.innerText = secCeil;
+                timerSub.innerText = 'FINAL CALL!';
+
+                if (secCeil !== lastBeepSecond) {
+                    lastBeepSecond = secCeil;
+                    announceFinalCountdown(secCeil);
+                }
+            } else {
+                timerEl.className = 'timer-normal';
+                timerEl.innerText = Math.max(0, Math.ceil(rem - finalSec)) + 's';
+                timerSub.innerText = 'BIDDING';
+                lastBeepSecond = -1;
+            }
+
+            document.getElementById('bid-label').innerText = auc.highest_bidder ? 'Current Bid' : 'Base Price';
+            document.getElementById('current-bid').innerText = `₹${auc.current_bid} Cr`;
+            document.getElementById('highest-bidder').innerText = auc.highest_bidder ? `Highest: ${auc.highest_bidder}` : 'Waiting for opening bid';
+
+            if (auc.round === 'COMPLETED') {
+                document.getElementById('player-name').innerText = 'Auction Completed!';
+                document.getElementById('player-role').innerText = 'FINAL';
+                document.getElementById('player-base').innerText = 'All players processed';
+            } else if (player) {
+                document.getElementById('player-photo').src = player.photo_url || '';
+                document.getElementById('player-role').innerText = player.role;
+                document.getElementById('player-name').innerText = player.name;
+                document.getElementById('player-base').innerText = `Base Price: ₹${player.base_price} Cr`;
+            }
+
+            if (myTeam) {
+                document.getElementById('my-purse').innerText = `₹${myTeam.purse} Cr`;
+                document.getElementById('my-squad-count').innerText = `${myTeam.players.length}/${settings.max_squad_size}`;
+                document.getElementById('my-mab').innerText = `₹${myTeam.mab} Cr`;
+
+                const counts = { BAT: 0, BOWL: 0, AR: 0, WK: 0 };
+                myTeam.players.forEach(p => { if (counts[p.role] !== undefined) counts[p.role]++; });
+                document.getElementById('cnt-bat').innerText = counts.BAT;
+                document.getElementById('cnt-bowl').innerText = counts.BOWL;
+                document.getElementById('cnt-ar').innerText = counts.AR;
+                document.getElementById('cnt-wk').innerText = counts.WK;
+
+                const bidBtn = document.getElementById('bid-btn');
+                const pdfBtn = document.getElementById('pdf-download-btn');
+                const nextBid = data.next_bid_amount;
+
+                bidBtn.className = 'btn-bid';
+                bidBtn.onclick = placeBid;
+
+                if (auc.round === 'COMPLETED') {
+                    bidBtn.disabled = true;
+                    bidBtn.innerText = 'AUCTION COMPLETED';
+                    if (pdfBtn) pdfBtn.style.display = 'block';
+                } else {
+                    if (pdfBtn) pdfBtn.style.display = 'none';
+
+                    if (!auc.is_active || auc.is_paused) {
+                        bidBtn.disabled = true;
+                        bidBtn.innerText = 'WAITING FOR AUCTIONEER...';
+                    } else if (auc.highest_bidder === MY_TEAM_NAME) {
+                        bidBtn.disabled = true;
+                        bidBtn.innerText = 'YOUR BID IS ACTIVE';
+                    } else if (myTeam.players.length >= settings.max_squad_size) {
+                        bidBtn.disabled = true;
+                        bidBtn.innerText = 'SQUAD FULL';
+                    } else if (nextBid > myTeam.mab) {
+                        bidBtn.disabled = true;
+                        bidBtn.innerText = `MAB LIMIT REACHED (Max ₹${myTeam.mab} Cr)`;
+                    } else {
+                        bidBtn.disabled = false;
+                        bidBtn.innerText = `BID ₹${nextBid} Cr`;
+                    }
+                }
+            }
+
+            const listHtml = data.teams.map(t => {
+                const pText = t.players.length
+                    ? t.players.map(p => `${p.name} (${p.role} - ₹${p.price}Cr)`).join(', ')
+                    : 'No players bought yet';
+                return `
+                    <div class="team-roster-card">
+                        <div class="team-roster-top">
+                            <span>${t.team_name} (${t.players.length}/${settings.max_squad_size})</span>
+                            <span>₹${t.purse} Cr</span>
+                        </div>
+                        <div class="roster-players-list">${pText}</div>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('all-teams-list').innerHTML = listHtml;
+        }
+
+        async function placeBid() {
+            const res = await fetch('/api/bid', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team_name: MY_TEAM_NAME, team_code: MY_TEAM_CODE })
+            });
+            const data = await res.json();
+            if (!data.success && data.message) alert(data.message);
+            fetchState();
+        }
+
+        async function adminCmd(action) {
+            await fetch(`/api/admin/${action}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team_code: MY_TEAM_CODE })
+            });
+            closeModal('admin-modal');
+            fetchState();
+        }
+    </script>
+{% endif %}
+</body>
+</html>
