@@ -410,6 +410,7 @@
                 pttBtn.innerText = '🔴 BROADCASTING LIVE... (RELEASE TO STOP)';
 
                 if (socket) socket.emit('voice_status', { team: MY_SHORT_NAME, speaking: true });
+setTimeout(fetchState, 150);
 
                 const source = audioCtx.createMediaStreamSource(micStream);
                 scriptProcessor = audioCtx.createScriptProcessor(2048, 1, 1);
