@@ -480,6 +480,15 @@ def handle_voice_stream(data):
 
 @socketio.on('voice_status')
 def handle_voice_status(data):
+    speaking = bool((data or {}).get('speaking'))
+    if speaking:
+        state = load_state()
+        sync_timers(state)
+        auc = state['auction']
+        settings = state['settings']
+        if auc['is_active'] and not auc['is_paused'] and auc['round'] != 'COMPLETED' and not auc.get('transition'):
+            auc['deadline'] = time.time() + settings['total_timer_seconds']
+            save_state(state)
     emit('speaker_status', data, broadcast=True, include_self=False)
 
 # Server start hote hi Excel se state initialize karein (Local + Cloud dono ke liye)
