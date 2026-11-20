@@ -3,4 +3,4 @@ flask-socketio
 openpyxl
 reportlab
 gunicorn
-eventlet
+gevent
